@@ -7,6 +7,10 @@
 
 A self-hosted homelab monitoring system for tracking GPU metrics, system resources, Docker containers, and LLM instances across multiple machines in real-time.
 
+
+![Dohtar Monitor Dashboard](DohtarMonitorDashboard.png)
+
+
 ## Features
 
 - **GPU Monitoring**: VRAM usage, temperature, utilization, power draw, and fan speed via nvidia-smi or pynvml
