@@ -1,0 +1,9 @@
+.git
+__pycache__
+*.pyc
+node_modules
+agent/installedLocation
+agent/__pycache__
+agent/collectors/__pycache__
+agent/probes/__pycache__
+agent/config.json

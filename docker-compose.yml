@@ -1,0 +1,34 @@
+version: "3.8"
+
+# Dohtar Monitor v2 — Agent-Based Architecture
+# Deploy example: /opt/dohtar-monitor/ (Linux) or E:\Docker\dohtar-monitor\ (Windows)
+# Dashboard: http://192.168.1.100:9090 (replace with your backend IP)
+# Agent ingest: http://192.168.1.100:9090/api/ingest (replace with your backend IP)
+# UDP discovery: port 9091
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: dohtar-backend
+    restart: unless-stopped
+    ports:
+      - "9090:9090"     # Dashboard + API + Agent ingest
+      - "9091:9091/udp" # Agent UDP discovery
+    environment:
+      - DB_PATH=/data/metrics.db
+      - RETENTION_DAYS=30
+      - RETENTION_PROCS_DAYS=7
+    volumes:
+      - metrics-data:/data
+    networks:
+      - monitor
+
+volumes:
+  metrics-data:
+    driver: local
+
+networks:
+  monitor:
+    driver: bridge

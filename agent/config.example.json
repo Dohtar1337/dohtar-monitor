@@ -1,0 +1,35 @@
+{
+  "agent_id": "ocm-7a3f2b1e9c04",
+  "machine_name": "example-ai-server",
+  "backend_url": "http://192.168.1.100:9090",
+  "install_path": "/opt/ocm-agent",
+  "poll_interval": 2,
+  "collectors": {
+    "system": true,
+    "gpu": true,
+    "processes": true,
+    "disk": true,
+    "docker": false,
+    "custom_endpoints": []
+  },
+  "services": [
+    {
+      "type": "llm",
+      "name": "llama.cpp",
+      "endpoint": "localhost:8081",
+      "probe": "llamacpp"
+    },
+    {
+      "type": "llm",
+      "name": "Ollama",
+      "endpoint": "localhost:11434",
+      "probe": "ollama"
+    },
+    {
+      "type": "stt",
+      "name": "Whisper",
+      "endpoint": "localhost:8083",
+      "probe": "whisper"
+    }
+  ]
+}

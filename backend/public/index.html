@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dohtar Monitor</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0b0d10;
+      --card: #111318;
+      --border: #1a1d24;
+      --text-primary: #e8eaed;
+      --text-secondary: #7a7f8a;
+      --accent: #00d4ff;
+      --accent-dark: #0099cc;
+      --online: #00ff88;
+      --stale: #ffbb00;
+      --offline: #ff3333;
+      --gpu-accent: #ff6b9d;
+      --purple: #a78bfa;
+      --font-sans: -apple-system, BlinkMacSystemFont, "IBM Plex Sans", "Segoe UI", sans-serif;
+      --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "Courier New", monospace;
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: 14px;
+    }
+
+    #root { width: 100%; min-height: 100%; display: flex; flex-direction: column; }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(180deg, #0f1115 0%, #0b0d10 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; flex-wrap: wrap;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .header-title {
+      font-size: 22px; font-weight: 700;
+      background: linear-gradient(135deg, #00d4ff, #00ff88);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .header-sub { font-size: 12px; color: var(--text-secondary); font-family: var(--font-mono); }
+    .header-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pill {
+      background: rgba(0,212,255,0.08); border: 1px solid rgba(0,212,255,0.2);
+      padding: 4px 10px; border-radius: 14px; font-size: 12px;
+      display: flex; align-items: center; gap: 6px; font-family: var(--font-mono);
+      transition: all 0.2s;
+    }
+    .pill:hover { border-color: var(--accent); box-shadow: 0 0 10px rgba(0,212,255,0.15); }
+    .pill.llm { background: rgba(0,255,136,0.06); border-color: rgba(0,255,136,0.2); }
+    .header-right {
+      display: flex; align-items: center; gap: 10px;
+      font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);
+    }
+    .header-btns { display: flex; gap: 4px; }
+    .hdr-btn {
+      background: var(--card); border: 1px solid var(--border); color: var(--text-secondary);
+      padding: 3px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;
+      font-family: var(--font-mono); transition: all 0.15s;
+    }
+    .hdr-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+    .hdr-btn.active { border-color: var(--online); color: var(--online); background: rgba(0,255,136,0.08); }
+    .hdr-btn.update { border-color: rgba(255,170,0,0.4); color: #fa0; }
+    .hdr-btn.update:hover { border-color: #fa0; background: rgba(255,170,0,0.1); }
+    .hdr-btn.updating { border-color: var(--accent); color: var(--accent); opacity: 0.7; pointer-events: none; }
+
+    /* ── Dot ── */
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+    .dot.on { background: var(--online); box-shadow: 0 0 6px var(--online); }
+    .dot.off { background: var(--offline); box-shadow: 0 0 6px var(--offline); }
+    .dot.stale { background: var(--stale); box-shadow: 0 0 6px var(--stale); }
+
+    /* ── Main ── */
+    .main {
+      flex: 1; overflow-y: auto; padding: 16px 20px;
+      max-width: 1440px; margin: 0 auto; width: 100%;
+    }
+
+    /* ── Responsive Grid ── */
+    .dash-grid {
+      display: grid; gap: 12px; align-items: start;
+    }
+    /* Mobile: single column */
+    .dash-grid { grid-template-columns: 1fr; }
+    /* Tablet/Desktop: 2 columns */
+    @media (min-width: 768px) {
+      .dash-grid { grid-template-columns: 1fr 1fr; }
+      .dash-grid .col-span-full { grid-column: 1 / -1; }
+    }
+    /* Ultra-wide: 3 columns */
+    @media (min-width: 1200px) {
+      .dash-grid { grid-template-columns: 1fr 1fr 1fr; }
+      .dash-grid .col-span-full { grid-column: auto; }
+    }
+
+    /* ── Machine Card ── */
+    .mc {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px; margin-bottom: 12px;
+    }
+    .mc-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border);
+    }
+    .mc-name { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .mc-meta { font-size: 12px; color: var(--text-secondary); font-family: var(--font-mono); display: flex; align-items: center; gap: 8px; }
+    .mc-meta .dot { margin-right: 2px; }
+
+    /* ── GPU Card (hero element) ── */
+    .gpu {
+      background: rgba(255,107,157,0.04); border: 1px solid rgba(255,107,157,0.15);
+      border-radius: 8px; padding: 12px; margin-bottom: 10px;
+    }
+    .gpu-top { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+    .gpu-ring-wrap { flex-shrink: 0; }
+    .gpu-info { flex: 1; min-width: 0; }
+    .gpu-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; }
+    .gpu-name { color: var(--text-primary); }
+    .gpu-temp { font-family: var(--font-mono); font-size: 14px; }
+    .gpu-stats {
+      font-size: 13px; color: var(--text-secondary); font-family: var(--font-mono);
+      margin-top: 2px;
+    }
+    .gpu-stats span { color: var(--text-primary); }
+    .gpu-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .gpu-tag {
+      font-size: 11px; padding: 2px 8px; border-radius: 4px; font-family: var(--font-mono);
+      display: flex; align-items: center; gap: 4px;
+    }
+    .gpu-tag.llm { background: rgba(0,255,136,0.12); color: var(--online); }
+    .gpu-tag.vision { background: rgba(167,139,250,0.15); color: var(--purple); }
+    .gpu-tag.stt { background: rgba(0,212,255,0.12); color: var(--accent); }
+
+    /* ── CPU + RAM compact row ── */
+    .sys-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+    .sys-ring-wrap { flex-shrink: 0; }
+    .sys-bars { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+    .bar-row {}
+    .bar-label {
+      display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 3px;
+    }
+    .bar-label .lbl { color: var(--text-secondary); }
+    .bar-label .val { font-family: var(--font-mono); }
+    .bar { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s ease; }
+    .bar-fill.cyan { background: linear-gradient(90deg, var(--accent), #00ff88); }
+    .bar-fill.pink { background: linear-gradient(90deg, var(--gpu-accent), #ff3399); }
+    .bar-fill.purple { background: linear-gradient(90deg, var(--purple), #c084fc); }
+
+    /* ── Process table ── */
+    .procs { margin-top: 2px; }
+    .procs-hdr {
+      display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 0.6fr;
+      font-size: 12px; color: var(--text-secondary); padding: 4px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .proc-row {
+      display: grid; grid-template-columns: 2fr 1fr 1fr 1fr 0.6fr;
+      font-size: 13px; font-family: var(--font-mono); padding: 4px 0;
+      border-bottom: 1px solid rgba(26,29,36,0.4);
+    }
+    .proc-row:hover { background: rgba(0,212,255,0.02); }
+    .proc-name { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .proc-val { color: var(--text-secondary); text-align: right; padding-right: 8px; }
+    .proc-val.hi { color: var(--online); font-weight: 600; }
+    .proc-val.gpu-hi { color: var(--gpu-accent); font-weight: 600; }
+
+    /* ── Docker Containers table ── */
+    .docker-section {
+      margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);
+    }
+    .docker-hdr {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .docker-icon {
+      font-size: 14px; width: 16px; text-align: center;
+    }
+    .docker-title {
+      font-size: 14px; font-weight: 600; color: var(--text-primary);
+    }
+    .docker-table {
+      display: grid; gap: 1px;
+    }
+    .docker-row {
+      display: grid; grid-template-columns: 1.5fr 0.6fr 0.8fr 0.5fr 0.6fr 0.6fr;
+      font-size: 12px; padding: 6px 0; border-bottom: 1px solid rgba(26,29,36,0.4);
+      align-items: center;
+    }
+    .docker-row:hover { background: rgba(0,212,255,0.02); }
+    .docker-col-name { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .docker-col-image { color: var(--text-secondary); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .docker-col-ports { color: var(--text-secondary); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .docker-col-created { color: var(--text-secondary); font-size: 11px; text-align: center; }
+    .docker-status {
+      display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px;
+      border-radius: 4px; font-size: 11px; font-weight: 600; font-family: var(--font-mono);
+    }
+    .docker-status.running {
+      background: rgba(0,255,136,0.12); color: var(--online);
+    }
+    .docker-status.stopped {
+      background: rgba(255,51,51,0.12); color: var(--offline);
+    }
+    .docker-status.paused {
+      background: rgba(255,187,0,0.12); color: var(--stale);
+    }
+    .docker-status-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+    }
+    .docker-status.running .docker-status-dot {
+      background: var(--online);
+    }
+    .docker-status.stopped .docker-status-dot {
+      background: var(--offline);
+    }
+    .docker-status.paused .docker-status-dot {
+      background: var(--stale);
+    }
+
+    /* ── Section headers ── */
+    .sec-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 10px; padding-bottom: 8px;
+    }
+    .sec-title {
+      font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px;
+    }
+    .sec-badge {
+      font-size: 12px; color: var(--text-secondary); font-family: var(--font-mono);
+    }
+
+    /* ── LLM Instance cards ── */
+    .llm-grid { display: grid; gap: 10px; grid-template-columns: 1fr; }
+    .llm {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px;
+    }
+    .llm-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .llm-model { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .badge {
+      font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .badge.idle { background: rgba(0,255,136,0.15); color: var(--online); }
+    .badge.processing { background: rgba(255,187,0,0.15); color: var(--stale); }
+    .badge.generating { background: rgba(255,107,157,0.15); color: var(--gpu-accent); }
+
+    .llm-progress { margin: 6px 0; }
+    .llm-progress-label {
+      display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary);
+      margin-bottom: 3px;
+    }
+    .llm-progress-label .val { font-family: var(--font-mono); color: var(--text-primary); }
+    .llm-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+    .llm-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+    .llm-bar-fill.yellow { background: linear-gradient(90deg, #ffbb00, #ff8800); }
+    .llm-bar-fill.cyan { background: linear-gradient(90deg, var(--accent), #00ff88); }
+
+    .llm-stats {
+      font-size: 12px; color: var(--text-secondary); font-family: var(--font-mono);
+      margin-top: 6px;
+    }
+    .llm-stats span { color: var(--text-primary); }
+    .llm-speed {
+      display: flex; align-items: center; gap: 12px;
+      font-size: 13px; font-family: var(--font-mono); margin: 6px 0;
+    }
+    .llm-speed .speed-val { color: var(--accent); font-weight: 600; font-size: 16px; }
+    .llm-speed .speed-label { color: var(--text-secondary); font-size: 11px; }
+    .llm-speed .speed-group { display: flex; flex-direction: column; }
+
+    .llm-runs {
+      margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border);
+    }
+    .llm-runs-title {
+      font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .llm-run-row {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 11px; font-family: var(--font-mono); padding: 4px 0;
+      color: var(--text-secondary); gap: 6px;
+    }
+    .llm-run-row .run-speed { color: var(--accent); font-weight: 600; min-width: 80px; }
+    .llm-run-row .run-tokens { color: var(--text-primary); min-width: 55px; }
+    .llm-run-row .run-duration { color: var(--purple); min-width: 45px; }
+    .llm-run-row .run-prompt { color: var(--text-secondary); font-size: 10px; }
+    .llm-run-row .run-time { opacity: 0.6; margin-left: auto; }
+
+    .llm-foot {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border);
+      font-size: 12px; color: var(--text-secondary); font-family: var(--font-mono);
+    }
+
+    /* ── History ── */
+    .hist {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 8px; padding: 14px;
+    }
+    .hist-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
+    .hist-tab {
+      background: none; border: 1px solid var(--border); color: var(--text-secondary);
+      padding: 3px 10px; border-radius: 12px; font-size: 11px; cursor: pointer;
+      font-family: var(--font-mono); transition: all 0.15s;
+    }
+    .hist-tab:hover { border-color: var(--accent); color: var(--text-primary); }
+    .hist-tab.active { border-color: var(--offline); color: var(--offline); background: rgba(255,51,51,0.08); }
+    .hist-tab.active.cyan { border-color: var(--accent); color: var(--accent); background: rgba(0,212,255,0.08); }
+    .hist-tab.active.green { border-color: var(--online); color: var(--online); background: rgba(0,255,136,0.08); }
+    .hist-tab.active.pink { border-color: var(--gpu-accent); color: var(--gpu-accent); background: rgba(255,107,157,0.08); }
+
+    .hist-label { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+    .hist-value { font-size: 18px; font-weight: 700; font-family: var(--font-mono); margin-bottom: 6px; }
+    .chart-wrap { height: 120px; }
+
+    /* ── Empty / Setup ── */
+    .install-container { max-width: 720px; margin: 0 auto; width: 100%; }
+    .install-header { text-align: center; margin-bottom: 32px; }
+    .install-header h2 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
+    .install-header p { color: var(--text-secondary); font-size: 14px; line-height: 1.6; }
+    .install-download { display: flex; justify-content: center; margin-bottom: 28px; }
+    .install-download a {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: linear-gradient(135deg, var(--accent-dark), var(--accent));
+      color: #fff; font-size: 14px; font-weight: 600; padding: 12px 28px;
+      border-radius: 8px; text-decoration: none; transition: all 0.2s;
+      box-shadow: 0 2px 12px rgba(0,212,255,0.3);
+    }
+    .install-download a:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,212,255,0.4); }
+    .os-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); }
+    .os-tab {
+      background: none; border: none; color: var(--text-secondary); cursor: pointer;
+      font-size: 13px; font-weight: 500; padding: 10px 20px;
+      border-bottom: 2px solid transparent; transition: all 0.2s; font-family: var(--font-sans);
+    }
+    .os-tab:hover { color: var(--text-primary); }
+    .os-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .os-content {
+      background: var(--card); border: 1px solid var(--border); border-top: none;
+      border-radius: 0 0 10px 10px; padding: 24px;
+    }
+    .install-step { margin-bottom: 20px; }
+    .install-step:last-child { margin-bottom: 0; }
+    .install-step-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--accent); color: #000; font-size: 11px; font-weight: 700;
+      margin-right: 8px; flex-shrink: 0;
+    }
+    .install-step-title {
+      font-size: 13px; font-weight: 600; color: var(--text-primary);
+      margin-bottom: 8px; display: flex; align-items: center;
+    }
+    .code-block {
+      background: #0a0c0f; border: 1px solid var(--border); border-radius: 6px;
+      padding: 14px 16px; font-family: var(--font-mono); font-size: 12px;
+      color: var(--online); overflow-x: auto; line-height: 1.7;
+    }
+    .code-block .comment { color: #555; }
+    .install-note { font-size: 12px; color: var(--text-secondary); margin-top: 8px; line-height: 1.5; }
+    .install-or { text-align: center; font-size: 12px; color: var(--text-secondary); margin: 16px 0; }
+    .spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 767px) {
+      .header { flex-direction: column; align-items: flex-start; gap: 10px; padding: 10px 12px; }
+      .header-pills { display: none; }
+      .main { padding: 8px 10px; }
+      .dash-grid { grid-template-columns: 1fr; }
+      .llm-grid { grid-template-columns: 1fr; }
+      .sys-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+    /* ── WebSocket hook ── */
+    const useMonitorWS = () => {
+      const [data, setData] = useState(null);
+      const [wsStatus, setWsStatus] = useState('connecting');
+      const wsRef = useRef(null);
+      const reconnRef = useRef(null);
+
+      useEffect(() => {
+        const connect = () => {
+          const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+          wsRef.current = new WebSocket(`${protocol}://${window.location.host}/ws`);
+          wsRef.current.onopen = () => setWsStatus('connected');
+          wsRef.current.onmessage = (evt) => {
+            try { setData(JSON.parse(evt.data)); } catch(e) {}
+          };
+          wsRef.current.onerror = () => setWsStatus('error');
+          wsRef.current.onclose = () => {
+            setWsStatus('disconnected');
+            reconnRef.current = setTimeout(connect, 3000);
+          };
+        };
+        connect();
+        return () => { wsRef.current?.close(); clearTimeout(reconnRef.current); };
+      }, []);
+
+      return { data, wsStatus };
+    };
+
+    /* ── History buffers ── */
+    const useHistoryBuffers = (data) => {
+      const buf = useRef({});
+
+      useEffect(() => {
+        if (!data?.agents) return;
+        const ts = data.ts || Date.now();
+        Object.entries(data.agents).forEach(([id, a]) => {
+          if (a.system) {
+            const ck = `cpu_${id}`;
+            if (!buf.current[ck]) buf.current[ck] = [];
+            buf.current[ck].push({ ts, value: a.system.cpu_load });
+            if (buf.current[ck].length > 600) buf.current[ck].shift();
+
+            const mk = `ram_${id}`;
+            if (!buf.current[mk]) buf.current[mk] = [];
+            buf.current[mk].push({ ts, value: (a.system.ram_used / a.system.ram_total) * 100 });
+            if (buf.current[mk].length > 600) buf.current[mk].shift();
+          }
+          (a.gpus || []).forEach((gpu, gi) => {
+            const vk = `vram_${id}_${gi}`;
+            if (!buf.current[vk]) buf.current[vk] = [];
+            buf.current[vk].push({ ts, value: (gpu.vram_used / gpu.vram_total) * 100 });
+            if (buf.current[vk].length > 600) buf.current[vk].shift();
+
+            const tk = `gtemp_${id}_${gi}`;
+            if (!buf.current[tk]) buf.current[tk] = [];
+            buf.current[tk].push({ ts, value: gpu.temp || 0 });
+            if (buf.current[tk].length > 600) buf.current[tk].shift();
+          });
+        });
+      }, [data]);
+
+      return buf.current;
+    };
+
+    /* ── Tiny components ── */
+    const Dot = ({ s }) => <span className={`dot ${s === 'offline' ? 'off' : s === 'stale' ? 'stale' : 'on'}`} />;
+
+    const shortenCpuModel = (model) => {
+      if (!model) return null;
+      let shortened = model
+        .replace(/^AMD\s+/, '')
+        .replace(/^Intel\(R\)\s+Core\(TM\)\s+/, '')
+        .replace(/^Intel\s+/, '')
+        .trim();
+      // Limit to reasonable length (first ~25 chars)
+      if (shortened.length > 25) shortened = shortened.substring(0, 22) + '...';
+      return shortened;
+    };
+
+    const Ring = ({ value, max = 100, size = 56, color, children }) => {
+      const pct = Math.min(100, (value / max) * 100);
+      const r = size / 2 - 3;
+      const c = 2 * Math.PI * r;
+      const off = c - (pct / 100) * c;
+      const col = color || (pct > 80 ? '#ff3333' : pct > 60 ? '#ffbb00' : '#00ff88');
+
+      return (
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#1a1d24" strokeWidth="2.5"/>
+          <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={col} strokeWidth="2.5"
+            strokeDasharray={c} strokeDashoffset={off} strokeLinecap="round"
+            transform={`rotate(-90 ${size/2} ${size/2})`}
+            style={{ transition: 'stroke-dashoffset 0.3s' }} />
+          <text x={size/2} y={size/2+1} textAnchor="middle" dominantBaseline="middle"
+            fill={col} fontSize={size > 50 ? '13' : '11'} fontFamily="var(--font-mono)" fontWeight="700">
+            {pct.toFixed(0)}%
+          </text>
+        </svg>
+      );
+    };
+
+    const MiniChart = ({ points, color = 'var(--offline)' }) => {
+      if (!points || points.length < 2) return <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>Collecting data...</div>;
+      const vals = points.map(p => p.value);
+      const mn = Math.min(...vals), mx = Math.max(...vals), rng = mx - mn || 1;
+      const W = 900, H = 100, P = 4;
+      const gw = W - 2*P, gh = H - 2*P;
+      const sp = gw / (points.length - 1);
+      const d = points.map((p, i) => {
+        const x = P + i * sp;
+        const y = P + gh - ((p.value - mn) / rng) * gh;
+        return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
+      }).join(' ');
+      return (
+        <div className="chart-wrap">
+          <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="cg" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stopColor={color} stopOpacity="0.25"/>
+                <stop offset="100%" stopColor={color} stopOpacity="0.02"/>
+              </linearGradient>
+            </defs>
+            <path d={d} stroke={color} strokeWidth="1.5" fill="none"/>
+            <path d={`${d} L ${P+gw} ${P+gh} L ${P} ${P+gh} Z`} fill="url(#cg)"/>
+            <text x={W-P} y={P+10} textAnchor="end" fontSize="10" fill="var(--text-secondary)" fontFamily="var(--font-mono)">{mx.toFixed(1)}</text>
+            <text x={W-P} y={P+gh} textAnchor="end" fontSize="10" fill="var(--text-secondary)" fontFamily="var(--font-mono)">{mn.toFixed(1)}</text>
+          </svg>
+        </div>
+      );
+    };
+
+    /* ── GPU Card ── */
+    const GpuCard = ({ gpu, idx, services }) => {
+      const pct = (gpu.vram_used / gpu.vram_total) * 100;
+      // Show VRAM in GB with 1 decimal
+      const vramGB = (gpu.vram_used / 1024).toFixed(1);
+      const totalGB = (gpu.vram_total / 1024).toFixed(0);
+      let tc = '#00ff88';
+      if (gpu.temp > 75) tc = '#ff3333';
+      else if (gpu.temp > 55) tc = '#ffbb00';
+
+      // GPU load color: green for low, yellow for medium, red for high
+      const gpuLoad = gpu.load || 0;
+      let loadColor = '#00ff88';
+      if (gpuLoad > 80) loadColor = '#ff3333';
+      else if (gpuLoad > 60) loadColor = '#ffbb00';
+
+      // Find models loaded on this specific GPU
+      // Filter by gpu_indices field to only show services actually on this GPU
+      const gpuModels = (services || []).filter(s => {
+        if ((s.type !== 'llm' && s.type !== 'stt')) return false;
+        // If gpu_indices is present, only show if GPU index matches
+        if (s.gpu_indices && s.gpu_indices.length > 0) {
+          return s.gpu_indices.includes(idx);
+        }
+        // Fallback to old behavior if gpu_indices not present (backward compatibility)
+        return true;
+      });
+
+      return (
+        <div className="gpu">
+          <div className="gpu-top">
+            <div className="gpu-ring-wrap">
+              <Ring value={gpuLoad} max={100} size={60} color={loadColor} />
+            </div>
+            <div className="gpu-info">
+              <div className="gpu-title">
+                <span className="gpu-name">GPU{idx}: {gpu.name.replace('NVIDIA ', '').replace('GeForce ', '')}</span>
+                <span className="gpu-temp" style={{ color: tc }}>{gpu.temp != null ? `${gpu.temp}°C` : ''}</span>
+              </div>
+              <div className="gpu-stats">
+                <span>{vramGB}</span> / {totalGB}G VRAM
+                {gpu.load != null && <> · <span>{gpu.load.toFixed(0)}%</span> util</>}
+                {gpu.power != null && <> · <span>{gpu.power.toFixed(0)}W</span></>}
+                {gpu.fan != null && <> · fan <span>{gpu.fan.toFixed(0)}%</span></>}
+              </div>
+            </div>
+          </div>
+          {gpuModels.length > 0 && (
+            <div className="gpu-tags">
+              {gpuModels.map((s, i) => {
+                const tagType = s.type === 'stt' ? 'stt' : (s.probe === 'ollama' ? 'vision' : 'llm');
+                const label = s.type === 'stt' ? 'STT' : 'LLM';
+                return (
+                  <span key={i} className={`gpu-tag ${tagType}`}>
+                    {label}: {s.model || s.name} · {s.endpoint}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    /* ── Process Table ── */
+    const ProcTable = ({ procs }) => {
+      if (!procs || procs.length === 0) return null;
+      const sorted = [...procs].sort((a, b) => (b.ram || 0) - (a.ram || 0)).slice(0, 6);
+      return (
+        <div className="procs">
+          <div className="procs-hdr">
+            <span>PROCESS</span><span style={{textAlign:'right',paddingRight:'8px'}}>CPU%</span>
+            <span style={{textAlign:'right',paddingRight:'8px'}}>RAM</span>
+            <span style={{textAlign:'right',paddingRight:'8px'}}>VRAM</span>
+            <span style={{textAlign:'right',paddingRight:'8px'}}>GPU</span>
+          </div>
+          {sorted.map((p, i) => (
+            <div key={i} className="proc-row">
+              <span className="proc-name">{p.name}</span>
+              <span className={`proc-val ${(p.cpu||0) > 50 ? 'hi' : ''}`}>{(p.cpu||0).toFixed(1)}</span>
+              <span className="proc-val">{(p.ram||0).toFixed(1)}G</span>
+              <span className={`proc-val ${(p.gpu_mem||0) > 0 ? 'gpu-hi' : ''}`}>{(p.gpu_mem||0) > 0 ? (p.gpu_mem).toFixed(1)+'G' : '—'}</span>
+              <span className="proc-val">{p.gpu || '—'}</span>
+            </div>
+          ))}
+        </div>
+      );
+    };
+
+    /* ── Helper: Format relative time ── */
+    const formatRelativeTime = (createdStr) => {
+      if (!createdStr) return '—';
+      try {
+        const created = new Date(createdStr);
+        const now = new Date();
+        const diffMs = now - created;
+        const diffSec = Math.floor(diffMs / 1000);
+        const diffMin = Math.floor(diffSec / 60);
+        const diffHrs = Math.floor(diffMin / 60);
+        const diffDays = Math.floor(diffHrs / 24);
+
+        if (diffDays > 0) return `${diffDays}d ago`;
+        if (diffHrs > 0) return `${diffHrs}h ago`;
+        if (diffMin > 0) return `${diffMin}m ago`;
+        return `${diffSec}s ago`;
+      } catch (e) {
+        return '—';
+      }
+    };
+
+    /* ── Docker Containers Table ── */
+    const DockerContainersTable = ({ containers }) => {
+      if (!containers || containers.length === 0) return null;
+
+      const sorted = [...containers].slice(0, 8);
+
+      const fmtUptime = (startedAt) => {
+        if (!startedAt || startedAt === '0001-01-01T00:00:00Z') return '—';
+        try {
+          const started = new Date(startedAt);
+          const now = new Date();
+          const diffSec = Math.floor((now - started) / 1000);
+          if (diffSec < 60) return `${diffSec}s`;
+          const diffMin = Math.floor(diffSec / 60);
+          if (diffMin < 60) return `${diffMin}m`;
+          const diffHrs = Math.floor(diffMin / 60);
+          if (diffHrs < 24) return `${diffHrs}h ${diffMin % 60}m`;
+          const diffDays = Math.floor(diffHrs / 24);
+          return `${diffDays}d ${diffHrs % 24}h`;
+        } catch (e) { return '—'; }
+      };
+
+      const fmtMem = (mb) => {
+        if (!mb || mb === 0) return '—';
+        if (mb >= 1024) return `${(mb / 1024).toFixed(1)}G`;
+        return `${Math.round(mb)}M`;
+      };
+
+      return (
+        <div className="docker-section">
+          <div className="docker-hdr">
+            <span className="docker-title">Docker Containers</span>
+            <span style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--text-secondary)' }}>{containers.length}</span>
+          </div>
+          {/* Column headers */}
+          <div className="docker-row" style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-secondary)', fontSize: '11px' }}>
+            <span>NAME</span><span>CPU</span><span>MEMORY</span><span>RST</span><span>UPTIME</span><span style={{textAlign:'right'}}>STATUS</span>
+          </div>
+          <div className="docker-table">
+            {sorted.map((c, i) => {
+              const statusClass = c.status && c.status.toLowerCase().includes('running') ? 'running' :
+                                  c.status && c.status.toLowerCase().includes('paused') ? 'paused' : 'stopped';
+              const cpuHi = (c.cpu_percent || 0) > 50;
+              return (
+                <div key={i} className="docker-row">
+                  <div className="docker-col-name" title={c.image || ''}>{c.name}</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', color: cpuHi ? 'var(--online)' : 'var(--text-secondary)' }}>
+                    {(c.cpu_percent || 0).toFixed(1)}%
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
+                    {fmtMem(c.memory_used)}{c.memory_limit > 0 ? ` / ${fmtMem(c.memory_limit)}` : ''}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono)', color: (c.restart_count || 0) > 0 ? 'var(--stale)' : 'var(--text-secondary)' }}>
+                    {c.restart_count || 0}
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', fontSize: '11px' }}>
+                    {statusClass === 'running' ? fmtUptime(c.started_at) : '—'}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span className={`docker-status ${statusClass}`}>
+                      <span className="docker-status-dot"></span>
+                      {statusClass}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    };
+
+    /* ── Machine Card ── */
+    const formatUptime = (seconds) => {
+      if (!seconds || seconds <= 0) return null;
+      const days = Math.floor(seconds / 86400);
+      const hrs = Math.floor((seconds % 86400) / 3600);
+      const mins = Math.floor((seconds % 3600) / 60);
+      if (days > 0) return `${days}d ${hrs}h`;
+      if (hrs > 0) return `${hrs}h ${mins}m`;
+      return `${mins}m`;
+    };
+
+    const MachineCard = ({ agent }) => {
+      const sys = agent.system || {};
+      const gpus = agent.gpus || [];
+      const containers = agent.containers || [];
+      const isStale = Date.now() - agent.last_seen > 10000;
+      const isOff = Date.now() - agent.last_seen > 60000;
+      const status = isOff ? 'offline' : isStale ? 'stale' : 'online';
+      const ramPct = sys.ram_total ? (sys.ram_used / sys.ram_total * 100) : 0;
+      const diskPct = sys.disk_total ? (sys.disk_used / sys.disk_total * 100) : 0;
+      const hasGpu = gpus.length > 0;
+      const uptime = formatUptime(sys.uptime);
+
+      return (
+        <div className="mc">
+          <div className="mc-head">
+            <div className="mc-name"><Dot s={status} /> {agent.machine_name}</div>
+            <div className="mc-meta">
+              {sys.cpu_cores && <><Dot s="on" /> {agent.ip}</>}
+              {agent.agent_version && agent.agent_version !== 'unknown' && (
+                <span style={{marginLeft:6,opacity:0.5,fontSize:'10px'}}>v{agent.agent_version}</span>
+              )}
+              {uptime && (
+                <span style={{marginLeft:6,opacity:0.5,fontSize:'10px'}} title="Machine uptime">up {uptime}</span>
+              )}
+            </div>
+          </div>
+
+          {/* GPU cards first — they're the hero */}
+          {gpus.map((gpu, idx) => (
+            <GpuCard key={idx} gpu={gpu} idx={idx} services={agent.services} />
+          ))}
+
+          {/* CPU ring + RAM/Disk bars */}
+          <div className="sys-row">
+            <div className="sys-ring-wrap">
+              <Ring value={sys.cpu_load || 0} max={100} size={hasGpu ? 48 : 56} />
+            </div>
+            <div className="sys-bars">
+              <div className="bar-row">
+                <div className="bar-label">
+                  <span className="lbl">
+                    {sys.cpu_model ? shortenCpuModel(sys.cpu_model) : 'CPU'}
+                    {sys.cpu_cores && ` (${sys.cpu_cores}c)`}
+                    {sys.cpu_temp && ` · ${sys.cpu_temp}°C`}
+                  </span>
+                  <span className="val">{(sys.cpu_load || 0).toFixed(0)}%</span>
+                </div>
+              </div>
+              <div className="bar-row">
+                <div className="bar-label">
+                  <span className="lbl">RAM</span>
+                  <span className="val">{(sys.ram_used||0).toFixed(1)} / {(sys.ram_total||0).toFixed(0)}</span>
+                </div>
+                <div className="bar"><div className="bar-fill cyan" style={{ width: `${ramPct}%` }}/></div>
+              </div>
+              <div className="bar-row">
+                <div className="bar-label">
+                  <span className="lbl">Disk</span>
+                  <span className="val">{(sys.disk_used||0).toFixed(0)} / {(sys.disk_total||0).toFixed(0)}</span>
+                </div>
+                <div className="bar"><div className="bar-fill purple" style={{ width: `${diskPct}%` }}/></div>
+              </div>
+            </div>
+          </div>
+
+          {/* Processes */}
+          <ProcTable procs={agent.processes} />
+
+          {/* Docker Containers */}
+          <DockerContainersTable containers={containers} />
+        </div>
+      );
+    };
+
+    /* ── LLM Instance Card ── */
+    const LlmCard = ({ service }) => {
+      const isGen = service.status === 'generating';
+      const isProc = service.status === 'processing' || (service.slot && service.slot === 'processing');
+      const kvUsage = service.kv_usage != null ? service.kv_usage : 0;
+      const kvPct = kvUsage * 100;
+      const kvTok = service.kv_tok;
+      const hasSpeed = service.speed_gen != null && service.speed_gen > 0;
+      const genProgress = service.gen_progress != null ? service.gen_progress : 0;
+      const genPct = Math.round(genProgress * 100);
+      const activeTokens = service.active_tokens || 0;
+      const nPredict = service.n_predict || 0;
+
+      const [runs, setRuns] = useState([]);
+      const prevEndpoint = useRef(null);
+
+      // Fetch last 5 completed runs (exact per-request data)
+      useEffect(() => {
+        if (!service.endpoint) return;
+        const fetchRuns = () => {
+          fetch(`/api/history/llm/${encodeURIComponent(service.endpoint)}/runs?limit=5`)
+            .then(r => r.json())
+            .then(d => setRuns(d.runs || []))
+            .catch(() => {});
+        };
+        fetchRuns();
+        const iv = setInterval(fetchRuns, 10000);
+        return () => clearInterval(iv);
+      }, [service.endpoint]);
+
+      let badge = service.status || 'idle';
+      if (badge === 'down' || badge === 'error' || badge === 'up') badge = 'idle';
+
+      const fmtTime = (ts) => {
+        if (!ts) return '';
+        const d = new Date(ts);
+        const now = new Date();
+        const diffMs = now - d;
+        if (diffMs < 60000) return `${Math.floor(diffMs/1000)}s ago`;
+        if (diffMs < 3600000) return `${Math.floor(diffMs/60000)}m ago`;
+        if (diffMs < 86400000) return `${Math.floor(diffMs/3600000)}h ago`;
+        return d.toLocaleDateString();
+      };
+
+      return (
+        <div className="llm">
+          <div className="llm-top">
+            <div className="llm-model">
+              <Dot s={badge === 'idle' ? 'online' : badge === 'generating' ? 'offline' : 'stale'} />
+              {service.model || service.name || 'Unknown'}
+            </div>
+            <span className={`badge ${badge}`}>{badge}</span>
+          </div>
+
+          {/* Live speed display — shown when generating or when we have speed data */}
+          {hasSpeed && (
+            <div className="llm-speed">
+              <div className="speed-group">
+                <span className="speed-val">{service.speed_gen.toFixed(1)}</span>
+                <span className="speed-label">tok/s gen</span>
+              </div>
+              {service.speed_pp != null && service.speed_pp > 0 && (
+                <div className="speed-group">
+                  <span className="speed-val" style={{color:'var(--stale)'}}>{service.speed_pp.toFixed(1)}</span>
+                  <span className="speed-label">tok/s pp</span>
+                </div>
+              )}
+              {service.tok_pred != null && service.tok_pred > 0 && (
+                <div className="speed-group">
+                  <span className="speed-val" style={{color:'var(--text-primary)',fontSize:'14px'}}>{service.tok_pred}</span>
+                  <span className="speed-label">tokens</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Generation progress bar — shown when actively generating */}
+          {(isGen || isProc) && (
+            <div className="llm-progress">
+              <div className="llm-progress-label">
+                <span>{genPct > 0 ? 'Generating' : 'Prompt Processing'}</span>
+                <span className="val">
+                  {genPct > 0 ? `${activeTokens} / ${nPredict} tokens (${genPct}%)` : 'processing...'}
+                </span>
+              </div>
+              <div className="llm-bar">
+                <div className="llm-bar-fill yellow" style={{ width: `${genPct > 0 ? genPct : 100}%`, opacity: genPct > 0 ? 1 : 0.3 }}/>
+              </div>
+            </div>
+          )}
+
+          {kvPct > 0 && (
+            <div className="llm-progress">
+              <div className="llm-progress-label">
+                <span>KV Cache</span>
+                <span className="val">{kvPct.toFixed(1)}%{kvTok ? ` (${kvTok} tok)` : ''}</span>
+              </div>
+              <div className="llm-bar"><div className="llm-bar-fill cyan" style={{ width: `${kvPct}%` }}/></div>
+            </div>
+          )}
+
+          {/* Recent runs — exact per-request data from slot transitions */}
+          {runs.length > 0 && (
+            <div className="llm-runs">
+              <div className="llm-runs-title">Recent generations</div>
+              {runs.map((run, i) => {
+                const durSec = run.t_total_ms ? (run.t_total_ms / 1000).toFixed(1) : null;
+                const genSec = run.t_generation_ms ? (run.t_generation_ms / 1000).toFixed(1) : null;
+                return (
+                  <div key={i} className="llm-run-row" title={
+                    `Gen: ${run.tok_generated} tok in ${genSec}s (${run.speed_gen} tok/s)\n` +
+                    `Prompt: ${run.tok_prompt || 0} tok` +
+                    (run.speed_pp ? ` (${run.speed_pp} tok/s)` : '') +
+                    `\nTotal: ${durSec}s`
+                  }>
+                    <span className="run-speed">{run.speed_gen.toFixed(1)} tok/s</span>
+                    <span className="run-tokens">{run.tok_generated} tok</span>
+                    <span className="run-duration">{durSec}s</span>
+                    {run.tok_prompt > 0 && <span className="run-prompt">p:{run.tok_prompt}</span>}
+                    <span className="run-time">{fmtTime(run.ts)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="llm-foot">
+            <span>slots: {service.busy_slots != null ? service.busy_slots : '?'}/{service.total_slots != null ? service.total_slots : '?'} · q: {service.queue || 0}</span>
+            <span>{service.endpoint}</span>
+            <span>{service.agent_name}</span>
+          </div>
+          {service.service_since && (
+            <div style={{ fontSize: '10px', color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', marginTop: '4px', opacity: 0.6 }}>
+              up since {new Date(service.service_since).toLocaleString()}
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    /* ── History Section ── */
+    const HistorySection = ({ data, buffers }) => {
+      const [sel, setSel] = useState(null);
+
+      const tabs = useMemo(() => {
+        if (!data?.agents) return [];
+        const t = [];
+        Object.entries(data.agents).forEach(([id, a]) => {
+          (a.gpus || []).forEach((g, gi) => {
+            t.push({ key: `gtemp_${id}_${gi}`, label: `GPU${gi} °C`, color: 'var(--offline)', agent: a.machine_name });
+            t.push({ key: `vram_${id}_${gi}`, label: `GPU${gi} VRAM`, color: 'var(--gpu-accent)', agent: a.machine_name });
+          });
+          t.push({ key: `cpu_${id}`, label: `${a.machine_name} CPU`, color: 'var(--accent)', agent: a.machine_name });
+          t.push({ key: `ram_${id}`, label: `${a.machine_name} RAM`, color: 'var(--online)', agent: a.machine_name });
+        });
+        return t;
+      }, [data]);
+
+      useEffect(() => {
+        if (tabs.length > 0 && !sel) setSel(tabs[0].key);
+      }, [tabs, sel]);
+
+      if (tabs.length === 0) return null;
+
+      const active = tabs.find(t => t.key === sel) || tabs[0];
+      const points = buffers[active.key] || [];
+      const lastVal = points.length > 0 ? points[points.length - 1].value : null;
+      const unit = active.label.includes('°C') ? '°C' : active.label.includes('VRAM') ? '%' : '%';
+
+      const tabColorClass = (t) => {
+        if (t.key !== sel) return '';
+        if (t.color === 'var(--offline)') return 'active';
+        if (t.color === 'var(--accent)') return 'active cyan';
+        if (t.color === 'var(--online)') return 'active green';
+        if (t.color === 'var(--gpu-accent)') return 'active pink';
+        return 'active';
+      };
+
+      const elapsed = points.length > 1 ? Math.round((points[points.length-1].ts - points[0].ts) / 60000) : 0;
+
+      return (
+        <div className="hist">
+          <div className="sec-head">
+            <div className="sec-title">History</div>
+            <div className="sec-badge">{elapsed} min · {points.length}pt</div>
+          </div>
+          <div className="hist-tabs">
+            {tabs.map(t => (
+              <button key={t.key} className={`hist-tab ${tabColorClass(t)}`} onClick={() => setSel(t.key)}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="hist-label">{active.label}</div>
+          {lastVal != null && (
+            <div className="hist-value" style={{ color: active.color }}>{lastVal.toFixed(1)}{unit}</div>
+          )}
+          <MiniChart points={points} color={active.color} />
+        </div>
+      );
+    };
+
+    /* ── Setup Instructions ── */
+    const SetupInstructions = () => {
+      const [osTab, setOsTab] = useState('windows');
+      const url = window.location.origin;
+      return (
+        <div className="install-container">
+          <div className="install-header">
+            <h2>Welcome to Dohtar Monitor</h2>
+            <p>No agents connected yet. Install the lightweight agent on each machine you want to monitor.</p>
+          </div>
+          <div className="install-download">
+            <a href="/api/download-agent">Download Agent (dohtar-agent.zip)</a>
+          </div>
+          <div className="os-tabs">
+            <button className={`os-tab ${osTab==='windows'?'active':''}`} onClick={()=>setOsTab('windows')}>Windows</button>
+            <button className={`os-tab ${osTab==='ubuntu'?'active':''}`} onClick={()=>setOsTab('ubuntu')}>Ubuntu / Linux</button>
+            <button className={`os-tab ${osTab==='mac'?'active':''}`} onClick={()=>setOsTab('mac')}>macOS</button>
+          </div>
+          <div className="os-content">
+            {osTab==='windows' && <div>
+              <div className="install-step"><div className="install-step-title"><span className="install-step-num">1</span>Install dependencies</div><div className="code-block"><span className="comment"># Extract zip, then in PowerShell:</span><br/>cd dohtar-agent<br/>pip install -r requirements.txt</div></div>
+              <div className="install-step"><div className="install-step-title"><span className="install-step-num">2</span>Run installer</div><div className="code-block">python install.py</div><div className="install-note">Auto-scans for backend and running LLM/STT services.</div></div>
+              <div className="install-or">— or manually —</div>
+              <div className="install-step"><div className="install-step-title"><span className="install-step-num">2</span>Manual config</div><div className="code-block"><span className="comment"># Copy config, set backend_url to: {url}</span><br/>copy config.example.json config.json<br/>python agent.py --config config.json --debug</div></div>
+            </div>}
+            {osTab==='ubuntu' && <div>
+              <div className="install-step"><div className="install-step-title"><span className="install-step-num">1</span>Install dependencies</div><div className="code-block">cd dohtar-agent<br/>pip3 install -r requirements.txt</div></div>
+              <div className="install-step"><div className="install-step-title"><span className="install-step-num">2</span>Run installer</div><div className="code-block">sudo python3 install.py</div><div className="install-note">Auto-detects services, installs systemd service.</div></div>
+              <div className="install-or">— or manually —</div>
+              <div className="install-step"><div className="install-step-title"><span className="install-step-num">2</span>Manual config</div><div className="code-block">cp config.example.json config.json<br/><span className="comment"># Set backend_url to: {url}</span><br/>python3 agent.py --config config.json --debug</div></div>
+            </div>}
+            {osTab==='mac' && <div>
+              <div className="install-step"><div className="install-step-title"><span className="install-step-num">1</span>Install dependencies</div><div className="code-block">cd dohtar-agent<br/>pip3 install -r requirements.txt</div></div>
+              <div className="install-step"><div className="install-step-title"><span className="install-step-num">2</span>Run installer</div><div className="code-block">sudo python3 install.py</div><div className="install-note">Auto-detects services, creates launchd plist.</div></div>
+              <div className="install-or">— or manually —</div>
+              <div className="install-step"><div className="install-step-title"><span className="install-step-num">2</span>Manual config</div><div className="code-block">cp config.example.json config.json<br/><span className="comment"># Set backend_url to: {url}</span><br/>python3 agent.py --config config.json --debug</div></div>
+            </div>}
+          </div>
+          <div className="install-note" style={{ textAlign: 'center', marginTop: '20px' }}>
+            Requires Python 3.10+ with <code style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>aiohttp</code> and <code style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>psutil</code>.
+          </div>
+        </div>
+      );
+    };
+
+    /* ── App ── */
+    const App = () => {
+      const { data, wsStatus } = useMonitorWS();
+      const buffers = useHistoryBuffers(data);
+      const [clock, setClock] = useState(new Date());
+      const [updating, setUpdating] = useState(false);
+      const [updateMsg, setUpdateMsg] = useState(null);
+
+      useEffect(() => {
+        const t = setInterval(() => setClock(new Date()), 1000);
+        return () => clearInterval(t);
+      }, []);
+
+      if (wsStatus === 'connecting' || !data) {
+        return (
+          <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <div className="header">
+              <div><div className="header-title">Dohtar Monitor</div></div>
+              <div className="header-right"><div className="spinner" /> Connecting...</div>
+            </div>
+            <div className="main"><SetupInstructions /></div>
+          </div>
+        );
+      }
+
+      const agents = data.agents ? Object.values(data.agents) : [];
+      const isConn = wsStatus === 'connected';
+
+      const triggerUpdateAll = async () => {
+        if (updating) return;
+        setUpdating(true);
+        setUpdateMsg(null);
+
+        // Capture current agent versions before update
+        const versionsBefore = {};
+        agents.forEach(a => { versionsBefore[a.agent_id] = a.agent_version; });
+
+        try {
+          const resp = await fetch('/api/agent-update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({}),
+          });
+          const result = await resp.json();
+          const queuedCount = result.queued?.length || 0;
+          setUpdateMsg(`Update queued for ${queuedCount} agent${queuedCount !== 1 ? 's' : ''}. Waiting for restart...`);
+
+          // Poll for version changes (agents restart with new version after ~5-15s)
+          if (queuedCount > 0) {
+            let checks = 0;
+            const maxChecks = 15; // Check for 30s
+            const checkInterval = setInterval(() => {
+              checks++;
+              let updated = 0;
+              let total = result.queued.length;
+              agents.forEach(a => {
+                if (result.queued.includes(a.agent_id) && a.agent_version !== versionsBefore[a.agent_id]) {
+                  updated++;
+                }
+              });
+
+              if (updated > 0) {
+                setUpdateMsg(`${updated}/${total} agents updated to v${agents.find(a => a.agent_version !== versionsBefore[a.agent_id])?.agent_version || '?'}`);
+              }
+
+              if (updated === total || checks >= maxChecks) {
+                clearInterval(checkInterval);
+                setUpdating(false);
+                if (updated === 0 && checks >= maxChecks) {
+                  setUpdateMsg(`No version change detected. Agents may need manual update.`);
+                }
+                setTimeout(() => setUpdateMsg(null), 8000);
+              }
+            }, 2000);
+          } else {
+            setUpdating(false);
+            setTimeout(() => setUpdateMsg(null), 5000);
+          }
+        } catch (err) {
+          setUpdateMsg('Update failed: ' + err.message);
+          setUpdating(false);
+          setTimeout(() => setUpdateMsg(null), 5000);
+        }
+      };
+
+      // Collect all LLM services across agents
+      const allLlm = [];
+      agents.forEach(a => {
+        (a.services || []).filter(s => s.type === 'llm').forEach(s => {
+          allLlm.push({ ...s, agent_name: a.machine_name });
+        });
+      });
+
+      // Sort agents: ones with GPUs first (most GPUs first), then by name
+      const sortedAgents = [...agents].sort((a, b) => {
+        const aGpus = (a.gpus || []).length;
+        const bGpus = (b.gpus || []).length;
+        if (bGpus !== aGpus) return bGpus - aGpus;
+        return (a.machine_name || '').localeCompare(b.machine_name || '');
+      });
+
+      // Split agents into columns for the grid
+      // Col 1: first agent (most GPUs), Col 2: remaining agents stacked
+      const col1Agents = sortedAgents.slice(0, 1);
+      const col2Agents = sortedAgents.slice(1);
+
+      return (
+        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
+          {/* Header */}
+          <div className="header">
+            <div>
+              <div className="header-title">Dohtar Monitor</div>
+              <div className="header-sub">{clock.toLocaleTimeString()} · {agents.length} agent{agents.length !== 1 ? 's' : ''} · 2s poll</div>
+            </div>
+            {agents.length > 0 && (
+              <div className="header-pills">
+                {agents.map(a => {
+                  const s = Date.now() - a.last_seen > 60000 ? 'offline' : Date.now() - a.last_seen > 10000 ? 'stale' : 'online';
+                  return <div key={a.agent_id} className="pill"><Dot s={s} /> {a.machine_name} <span style={{color:'var(--text-secondary)'}}>{a.ip}</span></div>;
+                })}
+                {allLlm.length > 0 && (
+                  <div className="pill llm"><Dot s="online" /> LLM <span style={{color:'var(--text-secondary)'}}>:{allLlm.length}</span></div>
+                )}
+              </div>
+            )}
+            <div className="header-right">
+              {agents.length > 0 && (
+                <div className="header-btns">
+                  <button
+                    className={`hdr-btn ${updating ? 'updating' : 'update'}`}
+                    onClick={triggerUpdateAll}
+                    title={updateMsg || 'Push latest agent files to all online agents'}
+                  >
+                    {updating ? '⟳ Updating...' : '⟳ Update Agents'}
+                  </button>
+                </div>
+              )}
+              {updateMsg && <span style={{color:'#fa0',fontSize:'11px'}}>{updateMsg}</span>}
+              <span>{isConn ? 'Connected' : 'Reconnecting'}</span>
+              <Dot s={isConn ? 'online' : 'offline'} />
+            </div>
+          </div>
+
+          {/* Main content */}
+          <div className="main">
+            {agents.length === 0 ? (
+              <SetupInstructions />
+            ) : (
+              <div className="dash-grid">
+                {/* Column 1: Primary machine (most GPUs) */}
+                <div>
+                  {col1Agents.map(a => <MachineCard key={a.agent_id} agent={a} />)}
+                </div>
+
+                {/* Column 2: Other machines stacked */}
+                <div>
+                  {col2Agents.map(a => <MachineCard key={a.agent_id} agent={a} />)}
+                </div>
+
+                {/* Column 3 (ultra-wide) or full span (tablet): LLM + History */}
+                <div className="col-span-full">
+                  {allLlm.length > 0 && (
+                    <div style={{ marginBottom: '12px' }}>
+                      <div className="sec-head">
+                        <div className="sec-title">LLM Instances</div>
+                        <div className="sec-badge">{allLlm.length} discovered</div>
+                      </div>
+                      <div className="llm-grid">
+                        {allLlm.map((s, i) => <LlmCard key={i} service={s} />)}
+                      </div>
+                    </div>
+                  )}
+                  <HistorySection data={data} buffers={buffers} />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
