@@ -1,13 +1,11 @@
 # Dohtar Monitor
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.9+](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![Node.js 18+](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-Supported-blue.svg)](https://www.docker.com/)
 
 A self-hosted homelab monitoring system for tracking GPU metrics, system resources, Docker containers, and LLM instances across multiple machines in real-time.
-
-![Dohtar Monitor Dashboard](DohtarMonitorDashboard.png)
 
 ## Features
 
@@ -15,10 +13,11 @@ A self-hosted homelab monitoring system for tracking GPU metrics, system resourc
 - **System Metrics**: CPU, RAM, disk usage, and uptime across all monitored machines
 - **Per-Process Tracking**: Detailed GPU memory mapping at the process level
 - **Docker Support**: Real-time container health monitoring with CPU %, memory, restart counts, and status
-- **LLM Instance Monitoring**: Track llama.cpp instances with idle/generating status, live token/s throughput, KV cache usage, and slot tracking
+- **LLM Instance Monitoring**: Track llama.cpp and Ollama instances with idle/generating status, live token/s throughput, KV cache usage, and slot tracking
 - **Generation History**: Detailed per-request metrics including exact token/s speed, token counts, and duration
 - **Over-The-Air Updates**: Agents auto-update from the dashboard
 - **Multi-Machine Support**: Monitor unlimited machines with unique IDs and real-time WebSocket synchronization
+- **Interactive Installer**: Guided CLI installer with auto-discovery of backend and local LLM/STT services
 - **Zero Build Step Dashboard**: Single-file React SPA with in-browser Babel compilation — no build process needed
 
 ## Table of Contents
@@ -27,8 +26,8 @@ A self-hosted homelab monitoring system for tracking GPU metrics, system resourc
 - [Architecture](#architecture)
 - [Installation](#installation)
   - [Backend Setup](#backend-setup)
-  - [Agent Setup (Linux)](#agent-setup-linux)
-  - [Agent Setup (Windows)](#agent-setup-windows)
+  - [Agent Setup (Interactive Installer)](#agent-setup-interactive-installer)
+  - [Agent Setup (Manual)](#agent-setup-manual)
 - [Configuration](#configuration)
   - [Agent Config Reference](#agent-config-reference)
 - [LLM Monitoring](#llm-monitoring)
@@ -42,22 +41,23 @@ A self-hosted homelab monitoring system for tracking GPU metrics, system resourc
 
 ### Backend (Docker)
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
-Backend will be available at `http://localhost:3000`
+Backend will be available at `http://localhost:9090`
 
-### Agent (Linux)
+### Agent (Interactive Installer — Recommended)
 ```bash
-pip install aiohttp psutil pynvml
-cp config.example.json config.json
-# Edit config.json with your backend URL and machine details
-python agent.py --config config.json
+cd agent
+pip install -r requirements.txt
+python install.py
 ```
+The installer will auto-discover the backend on your LAN, scan for running LLM/STT services, and configure everything interactively.
 
-### Agent (Windows)
-```powershell
-pip install aiohttp psutil pynvml
-copy config.example.json config.json
+### Agent (Manual)
+```bash
+cd agent
+pip install -r requirements.txt
+cp config.example.json config.json
 # Edit config.json with your backend URL and machine details
 python agent.py --config config.json
 ```
@@ -72,7 +72,7 @@ Dohtar Monitor follows a distributed agent-based architecture with a centralized
 │              Single HTML file, Babel in-browser              │
 │         Real-time updates via WebSocket connection           │
 └──────────────────────┬──────────────────────────────────────┘
-                       │ HTTP/WebSocket
+                       │ HTTP/WebSocket (:9090)
 ┌──────────────────────▼──────────────────────────────────────┐
 │              Backend (Express.js + SQLite)                   │
 │                                                              │
@@ -80,6 +80,7 @@ Dohtar Monitor follows a distributed agent-based architecture with a centralized
 │  • WebSocket server for real-time dashboard updates        │
 │  • OTA update queue management                             │
 │  • Metrics storage (SQLite with better-sqlite3)            │
+│  • UDP discovery listener (:9091)                          │
 └──────────────────────┬──────────────────────────────────────┘
                        │ REST API (POST /api/ingest)
         ┌──────────────┼──────────────┐
@@ -112,39 +113,29 @@ Continuous: Backend → Dashboard (WebSocket push)
 
 #### Using Docker (Recommended)
 
-1. Clone or download the backend code
-2. Create a `docker-compose.yml` file:
-
-```yaml
-version: '3.8'
-
-services:
-  dohtar-backend:
-    build: .
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - PORT=3000
-    volumes:
-      - ./data:/app/data
-    restart: unless-stopped
+1. Clone the repository:
+```bash
+git clone https://github.com/Dohtar1337/dohtar-monitor.git
+cd dohtar-monitor
 ```
 
-3. Build and run:
+2. Build and run:
 ```bash
-docker-compose up -d
+docker compose up -d
 ```
 
-4. Verify the backend is running:
+The included `docker-compose.yml` exposes port 9090 (HTTP/WebSocket/API) and port 9091/udp (agent auto-discovery).
+
+3. Verify the backend is running:
 ```bash
-curl http://localhost:3000/
+curl http://localhost:9090/
 ```
 
 #### Manual Setup (Linux/macOS/Windows)
 
-1. Install dependencies:
+1. Install dependencies (from the `backend/` directory):
 ```bash
+cd backend
 npm install
 ```
 
@@ -153,170 +144,179 @@ npm install
 npm start
 ```
 
-The backend will listen on port 3000 by default. Adjust the `PORT` environment variable to use a different port.
+The backend will listen on port 9090 by default.
 
-### Agent Setup (Linux)
+### Agent Setup (Interactive Installer)
+
+The recommended way to set up agents is with the interactive installer, which auto-discovers the backend on your LAN, scans for local LLM/STT services, and optionally registers a system service.
 
 #### Prerequisites
-- Python 3.9 or higher
+- Python 3.10 or higher
 - pip package manager
 
-#### Installation
+#### Steps
 
 1. Install Python dependencies:
 ```bash
-pip install aiohttp psutil pynvml
+cd agent
+pip install -r requirements.txt
 ```
 
-2. Copy and configure:
+> **Note**: On newer Linux distributions (Debian 12+, Ubuntu 23.04+), you may need to add `--break-system-packages` to the pip command, or use a virtual environment.
+
+2. Run the installer:
+```bash
+python install.py
+```
+
+The installer will walk you through:
+- Finding or entering your backend URL (auto-discovers via UDP broadcast)
+- Setting a machine name and agent ID
+- Choosing an install location
+- Selecting which metrics to collect (system, GPU, processes, disk, Docker)
+- Auto-scanning for local LLM/STT services on well-known ports
+- Setting the polling interval
+- Optionally installing a system service (systemd on Linux, Task Scheduler on Windows, launchd on macOS)
+
+To reconfigure an existing installation: `python install.py configure`
+
+To uninstall: `python install.py uninstall`
+
+### Agent Setup (Manual)
+
+If you prefer to configure manually:
+
+1. Install Python dependencies:
+```bash
+cd agent
+pip install -r requirements.txt
+```
+
+2. Copy and edit the example config:
 ```bash
 cp config.example.json config.json
 ```
 
-3. Edit `config.json` with your settings:
-```json
-{
-  "agent_id": "homelab-gpu-1",
-  "machine_name": "GPU Workstation",
-  "backend_url": "http://192.168.1.100:3000",
-  "poll_interval": 2,
-  "gpus": [0, 1],
-  "services": [
-    {
-      "name": "LLM Primary",
-      "endpoint": "http://127.0.0.1:8000",
-      "type": "llm",
-      "probe": "llamacpp"
-    }
-  ]
-}
-```
+3. Edit `config.json` with your settings (see [Configuration](#configuration) below).
 
-4. Test the agent:
+4. Run the agent:
 ```bash
 python agent.py --config config.json
 ```
 
-#### Running as a Systemd Service
+Add `--debug` for verbose logging output.
 
-1. Copy the service file:
-```bash
-sudo cp dohtar-agent.service /etc/systemd/system/
+#### Running as a Systemd Service (Linux)
+
+The installer can do this automatically, but if you prefer manual setup:
+
+1. Create a systemd unit file at `/etc/systemd/system/ocm-agent.service`:
+```ini
+[Unit]
+Description=Dohtar Monitor Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ocm-agent
+ExecStart=/usr/bin/python3 /opt/ocm-agent/agent.py --config /opt/ocm-agent/config.json
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-2. Edit the service file to match your installation path:
-```bash
-sudo nano /etc/systemd/system/dohtar-agent.service
-```
-
-3. Enable and start:
+2. Enable and start:
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable dohtar-agent
-sudo systemctl start dohtar-agent
+sudo systemctl enable ocm-agent
+sudo systemctl start ocm-agent
 ```
 
-4. Check status:
+3. Check status:
 ```bash
-sudo systemctl status dohtar-agent
+sudo systemctl status ocm-agent
+sudo journalctl -u ocm-agent -f
 ```
-
-### Agent Setup (Windows)
-
-#### Prerequisites
-- Python 3.9 or higher (installed and in PATH)
-- pip package manager
-
-#### Installation
-
-1. Install Python dependencies:
-```powershell
-pip install aiohttp psutil pynvml
-```
-
-2. Copy and configure:
-```powershell
-copy config.example.json config.json
-```
-
-3. Edit `config.json` with your settings (same format as Linux)
-
-4. Test the agent:
-```powershell
-python agent.py --config config.json
-```
-
-#### Running at Startup (Optional)
-
-Create a shortcut in the Startup folder that runs the agent:
-
-1. Create a batch file `run_agent.bat`:
-```batch
-@echo off
-cd /d C:\path\to\dohtar-agent
-python agent.py --config config.json
-pause
-```
-
-2. Place the batch file in `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\`
-
-Alternatively, use Windows Task Scheduler to run the agent at startup with elevated privileges if needed.
 
 ## Configuration
 
 ### Agent Config Reference
 
-Create a `config.json` file in the agent directory with the following structure:
+Create a `config.json` file in the agent directory. The easiest way is to copy and edit `config.example.json`.
 
 | Key | Type | Required | Example | Description |
 |-----|------|----------|---------|-------------|
-| `agent_id` | string | Yes | `"homelab-1"` | Unique identifier for this agent. Used to distinguish machines in the dashboard. Must be unique across all agents. |
+| `agent_id` | string | Yes | `"ocm-7a3f2b1e9c04"` | Unique identifier for this agent. Auto-generated by the installer. |
 | `machine_name` | string | Yes | `"GPU Workstation"` | Human-readable display name shown in the dashboard. |
-| `backend_url` | string | Yes | `"http://192.168.1.100:3000"` | Full URL to the Dohtar backend. Include protocol and port. |
-| `poll_interval` | integer | No (default: 2) | `2` | Seconds between metric collection and submission to backend. Lower values increase accuracy but raise network load. |
-| `gpus` | array | No | `[0, 1]` | List of GPU indices to monitor (0-indexed). Omit to skip GPU monitoring. |
-| `services` | array | No | `[ { ... } ]` | Array of LLM services to monitor. Each service requires `name`, `endpoint`, `type`, and `probe` keys. See LLM Monitoring section. |
+| `backend_url` | string | Yes | `"http://192.168.1.100:9090"` | Full URL to the Dohtar backend. Include protocol and port. |
+| `install_path` | string | No | `"/opt/ocm-agent"` | Directory where the agent is installed. Used by the updater. |
+| `poll_interval` | integer | No (default: 2) | `2` | Seconds between metric collection and submission to backend. |
+| `collectors` | object | No | `{ ... }` | Which metric collectors to enable. See below. |
+| `services` | array | No | `[ { ... } ]` | Array of LLM/STT services to monitor. See LLM Monitoring section. |
+
+#### Collectors Object
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `system` | boolean | `true` | CPU, RAM, uptime metrics |
+| `gpu` | boolean | `true` | GPU metrics via nvidia-smi/pynvml (auto-detects all GPUs) |
+| `processes` | boolean | `true` | Top processes and per-process GPU usage |
+| `disk` | boolean | `true` | Disk usage metrics |
+| `docker` | boolean | `false` | Docker container stats (requires Docker access) |
 
 ### Example Config
 
 ```json
 {
-  "agent_id": "homelab-primary",
+  "agent_id": "ocm-7a3f2b1e9c04",
   "machine_name": "Main Inference Box",
-  "backend_url": "http://192.168.1.50:3000",
+  "backend_url": "http://192.168.1.50:9090",
+  "install_path": "/opt/ocm-agent",
   "poll_interval": 2,
-  "gpus": [0, 1],
+  "collectors": {
+    "system": true,
+    "gpu": true,
+    "processes": true,
+    "disk": true,
+    "docker": false
+  },
   "services": [
     {
-      "name": "Primary LLM",
-      "endpoint": "http://127.0.0.1:8000",
       "type": "llm",
+      "name": "llama.cpp",
+      "endpoint": "localhost:8081",
       "probe": "llamacpp"
     },
     {
-      "name": "Secondary LLM",
-      "endpoint": "http://127.0.0.1:8001",
       "type": "llm",
-      "probe": "llamacpp"
+      "name": "Ollama",
+      "endpoint": "localhost:11434",
+      "probe": "ollama"
     }
   ]
 }
 ```
 
+> **Important**: The `endpoint` field should be `host:port` without the `http://` prefix — the agent adds it automatically.
+
 ## LLM Monitoring
 
-Dohtar Monitor tracks llama.cpp instances in real-time, providing visibility into inference workloads, KV cache usage, and throughput metrics.
+Dohtar Monitor tracks llama.cpp and Ollama instances in real-time, providing visibility into inference workloads, KV cache usage, and throughput metrics.
 
 ### Setup Requirements
 
-To enable LLM monitoring, start your llama.cpp instance with the `--metrics` and `--slots` flags:
+To enable full LLM monitoring with generation history, start your llama.cpp instance with the `--metrics` and `--slots` flags:
 
 ```bash
-./main -m model.gguf --metrics --slots -ngl 35 -c 2048
+llama-server -m model.gguf --metrics --slots -ngl 35 -c 2048
 ```
 
 **Important flags:**
-- `--metrics`: Enables the Prometheus metrics endpoint (required for monitoring)
+- `--metrics`: Enables the Prometheus metrics endpoint (required for live speed display and generation history)
 - `--slots`: Enables KV cache slot tracking (required for accurate cache monitoring)
 
 ### Monitored Metrics
@@ -327,11 +327,7 @@ The dashboard displays:
 - **Live Token/s**: Real-time inference speed during generation
 - **KV Cache**: Current usage and total capacity
 - **Slot Count**: Number of concurrent generation slots and their usage
-- **Generations History**: Table with per-request metrics:
-  - Token count
-  - Exact tokens/second speed
-  - Duration
-  - Timestamp
+- **Generations History**: Table with per-request metrics including token count, tokens/second speed, duration, and timestamp
 
 ### Configuration
 
@@ -340,49 +336,48 @@ In your `config.json`, add each llama.cpp instance under the `services` array:
 ```json
 "services": [
   {
-    "name": "My LLM",
-    "endpoint": "http://127.0.0.1:8000",
     "type": "llm",
+    "name": "My LLM",
+    "endpoint": "localhost:8081",
     "probe": "llamacpp"
   }
 ]
 ```
 
 - `name`: Display name in the dashboard
-- `endpoint`: Full URL including scheme and port
-- `type`: Always `"llm"`
-- `probe`: Always `"llamacpp"` (for llama.cpp compatibility)
+- `endpoint`: Host and port without protocol (e.g., `localhost:8081`)
+- `type`: `"llm"` for language models, `"stt"` for speech-to-text
+- `probe`: `"llamacpp"` for llama.cpp, `"ollama"` for Ollama, `"whisper"` for Whisper STT
 
 ## API Endpoints
 
 ### Metrics Ingestion
 **POST `/api/ingest`**
 
-Agents send metrics to this endpoint every 2 seconds.
+Agents send metrics to this endpoint every poll interval (default 2 seconds).
 
 Request body:
 ```json
 {
-  "agent_id": "homelab-1",
-  "timestamp": 1710432000,
-  "system": {
-    "cpu_percent": 25.5,
-    "ram_percent": 60.2,
-    "uptime_seconds": 864000
-  },
-  "gpu": [...],
-  "processes": [...],
-  "docker": [...],
-  "services": [...]
+  "agent_id": "ocm-7a3f2b1e9c04",
+  "machine_name": "GPU Workstation",
+  "agent_version": "2.5.2",
+  "ts": 1710432000000,
+  "client_ip": "192.168.1.50",
+  "system": { ... },
+  "gpus": [ ... ],
+  "processes": [ ... ],
+  "containers": [ ... ],
+  "services": [ ... ]
 }
 ```
+
+Response includes any pending commands (e.g., OTA update triggers).
 
 ### Latest Metrics
 **GET `/api/latest`**
 
 Retrieve the latest metrics snapshot for all agents (also broadcast via WebSocket).
-
-Response: Latest metrics from all agents with timestamps.
 
 ### LLM Generation History
 **GET `/api/history/llm/:endpoint/runs`**
@@ -390,17 +385,23 @@ Response: Latest metrics from all agents with timestamps.
 Retrieve recent generation runs for a specific LLM endpoint.
 
 Parameters:
-- `:endpoint`: URL-encoded endpoint URL (e.g., `http%3A%2F%2F127.0.0.1%3A8000`)
+- `:endpoint`: URL-encoded endpoint (e.g., `localhost%3A8081`)
 - `?limit=100` (optional): Number of recent runs to return
 
 Response:
 ```json
 [
   {
-    "timestamp": 1710432000,
-    "tokens": 256,
-    "duration_ms": 8192,
-    "tokens_per_second": 31.25
+    "ts": 1710432000000,
+    "endpoint": "localhost:8081",
+    "model": "model-name",
+    "tok_generated": 256,
+    "tok_prompt": 45,
+    "speed_gen": 31.2,
+    "speed_pp": 120.5,
+    "t_generation_ms": 8205.1,
+    "t_prompt_ms": 373.4,
+    "t_total_ms": 8578.5
   }
 ]
 ```
@@ -408,12 +409,12 @@ Response:
 ### Queue Agent Update
 **POST `/api/agent-update`**
 
-Queue an OTA update for a specific agent.
+Queue an OTA update for a specific agent. The update command is delivered in the next ingest response.
 
 Request body:
 ```json
 {
-  "agent_id": "homelab-1"
+  "agent_id": "ocm-7a3f2b1e9c04"
 }
 ```
 
@@ -422,11 +423,14 @@ Request body:
 
 Download the agent zip file for manual installation or OTA updates.
 
+### Agent Version
+**GET `/api/agent-version`**
+
+Returns the latest agent version available on the backend.
+
 ## Dashboard
 
-> Screenshot coming soon
-
-The Dohtar Monitor dashboard is a single-file React application served by the backend. No build process is required—Babel compiles JSX in the browser.
+The Dohtar Monitor dashboard is a single-file React application served by the backend. No build process is required — Babel compiles JSX in the browser.
 
 ### Features
 
@@ -442,7 +446,7 @@ The Dohtar Monitor dashboard is a single-file React application served by the ba
 
 Open your browser and navigate to:
 ```
-http://<backend-ip>:3000
+http://<backend-ip>:9090
 ```
 
 ## Troubleshooting
@@ -454,9 +458,9 @@ http://<backend-ip>:3000
 **Solutions**:
 1. Verify the `backend_url` in `config.json` is correct and reachable:
    ```bash
-   curl http://<backend-ip>:3000/api/latest
+   curl http://<backend-ip>:9090/api/latest
    ```
-2. Check firewall rules allow outbound connections to the backend port
+2. Check firewall rules allow outbound connections to port 9090
 3. Ensure the backend is running:
    ```bash
    docker ps  # if using Docker
@@ -468,14 +472,10 @@ http://<backend-ip>:3000
 **Symptom**: CPU and RAM show, but GPU metrics are missing.
 
 **Solutions**:
-1. Verify `pynvml` is installed:
-   ```bash
-   pip install pynvml
-   ```
-2. Check that GPU indices in `config.json` are correct (use `nvidia-smi` to verify)
-3. Ensure `nvidia-smi` is available on the system
-4. If using WSL2, verify GPU passthrough is configured correctly
-5. Check agent logs for GPU initialization errors
+1. Ensure `gpu` is enabled in the `collectors` section of `config.json`
+2. Ensure `nvidia-smi` is available on the system (the agent uses it for GPU detection)
+3. If using WSL2, verify GPU passthrough is configured correctly
+4. Check agent logs for GPU initialization errors (run with `--debug` flag)
 
 ### LLM Monitoring Not Working
 
@@ -483,11 +483,11 @@ http://<backend-ip>:3000
 
 **Solutions**:
 1. Verify llama.cpp is started with `--metrics` and `--slots` flags
-2. Test the metrics endpoint manually:
+2. Test the health endpoint manually:
    ```bash
-   curl http://127.0.0.1:8000/metrics
+   curl http://localhost:8081/health
    ```
-3. Check the `endpoint` in `config.json` matches your llama.cpp server URL
+3. Check the `endpoint` in `config.json` is `host:port` format without `http://` prefix
 4. Ensure the endpoint is reachable from the agent machine (not just localhost)
 5. Check agent logs for HTTP errors when connecting to the endpoint
 
@@ -496,14 +496,14 @@ http://<backend-ip>:3000
 **Symptom**: No Docker containers appear in the dashboard.
 
 **Solutions**:
-1. Verify Docker is installed and running
-2. Check that the agent process has permission to access the Docker socket (Linux):
+1. Ensure `docker` is set to `true` in the `collectors` section of `config.json` (it defaults to `false`)
+2. Verify Docker is installed and running
+3. Check that the agent process has permission to access the Docker socket (Linux):
    ```bash
    sudo usermod -aG docker $USER
    # Then log out and back in
    ```
-3. On Windows, ensure Docker Desktop is running
-4. Check Docker daemon connectivity from the agent machine
+4. On Windows, ensure Docker Desktop is running
 
 ### WebSocket Connection Drops
 
@@ -511,10 +511,9 @@ http://<backend-ip>:3000
 
 **Solutions**:
 1. Check network connectivity between client and backend
-2. Verify firewall rules allow WebSocket connections (port 3000)
+2. Verify firewall rules allow WebSocket connections (port 9090)
 3. Restart the backend service
 4. Check backend logs for connection errors
-5. Try accessing the dashboard from a different machine to isolate client issues
 
 ### High CPU Usage by Agent
 
@@ -522,7 +521,7 @@ http://<backend-ip>:3000
 
 **Solutions**:
 1. Increase the `poll_interval` in `config.json` (default is 2 seconds)
-2. Reduce the number of GPUs being monitored if possible
+2. Disable collectors you don't need in the `collectors` section
 3. Remove unused services from the `services` array
 4. Check if GPU metrics collection is stalling (verify `nvidia-smi` performance)
 
@@ -533,8 +532,8 @@ Contributions are welcome! Please feel free to open issues for bugs, feature req
 ### Development Setup
 
 1. Clone the repository
-2. Install backend dependencies: `npm install`
-3. Install agent dependencies: `pip install aiohttp psutil pynvml`
+2. Install backend dependencies: `cd backend && npm install`
+3. Install agent dependencies: `cd agent && pip install -r requirements.txt`
 4. Start the backend locally and agents on test machines
 5. Make your changes and test thoroughly
 6. Submit a pull request with a clear description of your changes
