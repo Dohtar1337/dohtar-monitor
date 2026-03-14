@@ -5,7 +5,11 @@
 [![Node.js 18+](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-Supported-blue.svg)](https://www.docker.com/)
 
-Help me buy Claude Pro Max: bc1q24qhjfhyudqkldn5lc9vemgpfv9hesanvcw70d
+---
+### ☕ Support this project
+**BTC:** `bc1q24qhjfhyudqkldn5lc9vemgpfv9hesanvcw70d`
+
+---
 
 A self-hosted homelab monitoring system for tracking GPU metrics, system resources, Docker containers, and LLM instances across multiple machines in real-time.
 
