@@ -5,11 +5,11 @@
 [![Node.js 18+](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![Docker](https://img.shields.io/badge/Docker-Supported-blue.svg)](https://www.docker.com/)
 
+Help me buy Claude Pro Max: bc1q24qhjfhyudqkldn5lc9vemgpfv9hesanvcw70d
+
 A self-hosted homelab monitoring system for tracking GPU metrics, system resources, Docker containers, and LLM instances across multiple machines in real-time.
 
-
 ![Dohtar Monitor Dashboard](DohtarMonitorDashboard.png)
-
 
 ## Features
 
@@ -30,8 +30,7 @@ A self-hosted homelab monitoring system for tracking GPU metrics, system resourc
 - [Architecture](#architecture)
 - [Installation](#installation)
   - [Backend Setup](#backend-setup)
-  - [Agent Setup (Interactive Installer)](#agent-setup-interactive-installer)
-  - [Agent Setup (Manual)](#agent-setup-manual)
+  - [Agent Setup](#agent-setup)
 - [Configuration](#configuration)
   - [Agent Config Reference](#agent-config-reference)
 - [LLM Monitoring](#llm-monitoring)
@@ -49,22 +48,27 @@ docker compose up -d
 ```
 Backend will be available at `http://localhost:9090`
 
-### Agent (Interactive Installer — Recommended)
+### Agent (on any machine in your network)
+
+Once the backend is running, set up an agent on each machine you want to monitor:
+
+**Linux:**
 ```bash
-cd agent
+curl http://<backend-ip>:9090/api/download-agent -o agent.zip
+unzip agent.zip -d ocm-agent && cd ocm-agent
+pip install -r requirements.txt
+python3 install.py
+```
+
+**Windows (PowerShell):**
+```powershell
+Invoke-WebRequest http://<backend-ip>:9090/api/download-agent -OutFile agent.zip
+Expand-Archive agent.zip -DestinationPath ocm-agent; cd ocm-agent
 pip install -r requirements.txt
 python install.py
 ```
-The installer will auto-discover the backend on your LAN, scan for running LLM/STT services, and configure everything interactively.
 
-### Agent (Manual)
-```bash
-cd agent
-pip install -r requirements.txt
-cp config.example.json config.json
-# Edit config.json with your backend URL and machine details
-python agent.py --config config.json
-```
+The installer auto-discovers the backend on your LAN, scans for running LLM/STT services, and configures everything interactively.
 
 ## Architecture
 
@@ -150,25 +154,36 @@ npm start
 
 The backend will listen on port 9090 by default.
 
-### Agent Setup (Interactive Installer)
+### Agent Setup
 
-The recommended way to set up agents is with the interactive installer, which auto-discovers the backend on your LAN, scans for local LLM/STT services, and optionally registers a system service.
+No need to clone the repo on agent machines — the backend serves the agent files directly.
 
 #### Prerequisites
 - Python 3.10 or higher
 - pip package manager
 
-#### Steps
+#### Download and Install
 
-1. Install Python dependencies:
+**Linux:**
 ```bash
-cd agent
+curl http://<backend-ip>:9090/api/download-agent -o agent.zip
+unzip agent.zip -d ocm-agent && cd ocm-agent
+pip install -r requirements.txt
+```
+
+**Windows (PowerShell):**
+```powershell
+Invoke-WebRequest http://<backend-ip>:9090/api/download-agent -OutFile agent.zip
+Expand-Archive agent.zip -DestinationPath ocm-agent; cd ocm-agent
 pip install -r requirements.txt
 ```
 
 > **Note**: On newer Linux distributions (Debian 12+, Ubuntu 23.04+), you may need to add `--break-system-packages` to the pip command, or use a virtual environment.
 
-2. Run the installer:
+Or just open `http://<backend-ip>:9090/api/download-agent` in your browser to download the zip file.
+
+#### Interactive Installer (Recommended)
+
 ```bash
 python install.py
 ```
@@ -186,25 +201,13 @@ To reconfigure an existing installation: `python install.py configure`
 
 To uninstall: `python install.py uninstall`
 
-### Agent Setup (Manual)
+#### Manual Setup
 
-If you prefer to configure manually:
+If you prefer to configure manually instead of using the installer:
 
-1. Install Python dependencies:
-```bash
-cd agent
-pip install -r requirements.txt
-```
-
-2. Copy and edit the example config:
 ```bash
 cp config.example.json config.json
-```
-
-3. Edit `config.json` with your settings (see [Configuration](#configuration) below).
-
-4. Run the agent:
-```bash
+# Edit config.json with your settings (see Configuration section below)
 python agent.py --config config.json
 ```
 
